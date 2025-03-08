@@ -1,0 +1,12 @@
+# psycopg2-binary
+openai>=1.0.0
+pydantic-settings>=2.0.0
+pytest
+python-dotenv>=1.0.0
+llama-index>=0.9.0
+llama-index-experimental
+llama-index-llms-openai
+llama-index-utils-workflow
+fastapi<=0.111.0
+uvicorn
+itsdangerous
