@@ -1,6 +1,6 @@
 from enum import Enum
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Dict, Optional
 from datetime import date
 
 class IntentType(Enum):
@@ -23,17 +23,38 @@ class Location(BaseModel):
 
 class DayPlan(BaseModel):
     day: int
-    date: date  # Actual date for hotel booking
-    location: Location  # Primary location for this day
-    activity_times: List[str] = []
-    activity_descriptions: List[str] = []
-    activity_locations: List[Location] = []  # To find hotels near activities
-    meal_times: List[str] = []
-    meal_descriptions: List[str] = []
-    meal_locations: List[Location] = []  # To find hotels near restaurants
-    transit_from: List[str] = []
-    transit_to: List[str] = []
-    transit_mode: List[str] = []
+    location: Location  # Main location for the day
+    schedule: List[Dict[str, str]] = []  # Simplified timeline including activities and meals
+    # Each dict has: {"time": "09:00", "type": "activity|meal|transit", "description": "...", "location": "台北市信義區"}
+
+    @property
+    def activities(self) -> List[Dict[str, str]]:
+        """Get all activities for the day"""
+        return [item for item in self.schedule if item.get("type") == "activity"]
+
+    @property
+    def meals(self) -> List[Dict[str, str]]:
+        """Get all meals for the day"""
+        return [item for item in self.schedule if item.get("type") == "meal"]
+
+    @property
+    def transits(self) -> List[Dict[str, str]]:
+        """Get all transit events for the day"""
+        return [item for item in self.schedule if item.get("type") == "transit"]
+    
+# class DayPlan(BaseModel):
+#     day: int
+#     date: date  # Actual date for hotel booking
+#     location: Location  # Primary location for this day
+#     activity_times: List[str] = []
+#     activity_descriptions: List[str] = []
+#     activity_locations: List[Location] = []  # To find hotels near activities
+#     meal_times: List[str] = []
+#     meal_descriptions: List[str] = []
+#     meal_locations: List[Location] = []  # To find hotels near restaurants
+#     transit_from: List[str] = []
+#     transit_to: List[str] = []
+#     transit_mode: List[str] = []
 
 # class HotelPreferences(BaseModel):
 #     hotel_type_ids: List[int] = []  # From /hotel_group/types

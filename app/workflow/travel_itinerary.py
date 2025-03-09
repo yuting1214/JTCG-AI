@@ -26,12 +26,24 @@ class TravelItineraryWorkflow(Workflow):
     def __init__(
         self,
         *args: Any,
-        verbose: bool = False,
         existing_context: Optional[Dict] = None,
         existing_itinerary: Optional[Dict] = None,
+        verbose: bool = False,
+        timeout: float = 200.0,    
         **kwargs: Any
     ) -> None:
-        super().__init__(*args, **kwargs)
+        """
+        Initialize the TravelItineraryWorkflow.
+
+        Args:
+            *args: Additional arguments to pass to the Workflow constructor.
+            existing_context: Existing context for the workflow.
+            existing_itinerary: Existing itinerary for the workflow.
+            verbose: Whether to print verbose output.
+            timeout: Timeout in seconds for workflow execution. Default is 200 seconds.
+            **kwargs: Additional keyword arguments to pass to the Workflow constructor.
+        """
+        super().__init__(*args, timeout=timeout, **kwargs)
         self.verbose = verbose
         
         # Initialize agents

@@ -4,8 +4,7 @@ from typing import List, Optional
 from app.workflow.models import (
     DayPlan,
     TravelItinerary,
-    HotelRecommendation,
-    HotelPreferences
+    HotelRecommendation
 )
 
 class ItineraryArtifact(BaseModel):
@@ -24,11 +23,6 @@ class ItineraryArtifact(BaseModel):
         """Update just the daily plans within the itinerary"""
         if self.itinerary:
             self.itinerary.daily_plans = new_plans
-            
-    def update_hotel_preferences(self, preferences: HotelPreferences):
-        """Update hotel preferences"""
-        if self.itinerary:
-            self.itinerary.hotel_preferences = preferences
             
     def update_hotels(self, hotels: List[HotelRecommendation]):
         """Update hotel recommendations"""

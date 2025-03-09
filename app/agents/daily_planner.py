@@ -1,8 +1,9 @@
-from typing import List
+from typing import List, Dict, Any
 from app.agents.base import BaseAgent
 from app.workflow.events import StopEvent
+from app.workflow.models import TravelItinerary
 from app.artifacts.context import ContextArtifact
-from app.artifacts.itinerary import DayPlan, ItineraryArtifact
+from app.artifacts.itinerary import ItineraryArtifact
 from llama_index.llms.openai import OpenAI
 from llama_index.core import PromptTemplate
 
@@ -12,45 +13,90 @@ class DailyPlannerAgent(BaseAgent):
         self.planning_prompt = PromptTemplate(
             template="""
             Create a detailed day-by-day travel itinerary for:
-            Destination: {destination}
-            Duration: {duration} days
-            Group Size: {group_size}
-            Budget: {budget}
-            Preferences: {preferences}
+                Destination: {destination}
+                Duration: {duration} days
+                Group Size: {group_size}
+                Budget: {budget}
+                Preferences: {preferences}
 
             For each day, provide:
-            1. Main Location: Specify the county and district where most activities will take place
-            2. Activities: List of activities with:
-               - Times
-               - Descriptions
-               - Specific locations (county, district, and coordinates if known)
-            3. Meals: List of meals with:
-               - Times
-               - Descriptions
-               - Restaurant locations
-            4. Transit: Transportation details between locations
-            
+                1. Day number
+                2. Main location (county and district)
+                3. Schedule as a chronological list of events, where each event has:
+                - time (in 24-hour format, e.g. "09:00")
+                - type ("activity", "meal", or "transit")
+                - description (what to do/eat/how to move)
+                - location (county and district)
+
+                Example day format:
+                {
+                    "day": 1,
+                    "location": {"county": "台北市", "district": "信義區"},
+                    "schedule": [
+                        {
+                            "time": "09:00",
+                            "type": "meal",
+                            "description": "Traditional breakfast at Fu Hang Soy Milk",
+                            "location": "台北市中正區"
+                        },
+                        {
+                            "time": "10:30",
+                            "type": "activity",
+                            "description": "Visit Taipei 101 Observation Deck",
+                            "location": "台北市信義區"
+                        },
+                        {
+                            "time": "12:00",
+                            "type": "transit",
+                            "description": "Take MRT from Taipei 101 to Ximen",
+                            "location": "台北市信義區到萬華區"
+                        }
+                    ]
+                }
+
+            Ensure:
+            - Activities are reasonably spaced
+            - Include breakfast, lunch, and dinner
+            - Account for travel time between locations
+            - Stay within daily budget
             """
-        )
+    )
+
+    def _prepare_prompt_variables(self, context: ContextArtifact) -> Dict[str, Any]:
+        """Prepare and validate all variables needed for the prompt"""
+        
+        return {
+            "destination": getattr(context, "destination", "Unknown"),
+            "duration": getattr(context, "duration", 1),
+            # "start_date": start_date.isoformat(),
+            "group_size": getattr(context, "group_size", 1),
+            "budget": getattr(context, "budget", "flexible"),
+            "preferences": getattr(context, "preferences", "standard travel preferences")
+        }
+
 
     async def process(self, context: ContextArtifact) -> StopEvent:
         """Generate daily plans based on travel context."""
         try:
+    
+            # Prepare prompt variables with defaults
+            prompt_vars = self._prepare_prompt_variables(context)
+
             # Generate daily plans
             daily_plans = await self.llm.astructured_predict(
-                List[DayPlan],
+                TravelItinerary,
                 self.planning_prompt,
-                **context.model_dump()
+                **prompt_vars
             )
+
+            self._log_verbose(f"Step - DailyPlannerAgent: Daily plans generated - {daily_plans}")
 
             # Create itinerary artifact
             itinerary = ItineraryArtifact(
-                destination=context.destination,
-                duration=context.duration,
-                daily_plans=daily_plans
+                itinerary=daily_plans
             )
             
-            return StopEvent(content=itinerary)
+            return StopEvent(result=itinerary.model_dump())
             
         except Exception as e:
             self._log_verbose(f"Error generating daily plans: {str(e)}")
@@ -68,17 +114,23 @@ class DailyPlannerAgent(BaseAgent):
     ) -> StopEvent:
         """Update existing plans with new context."""
         try:
+            # Prepare prompt variables with defaults
+            prompt_vars = self._prepare_prompt_variables(updated_context)
+            
+            # if existing_itinerary.itinerary:
+            #     prompt_vars["start_date"] = existing_itinerary.itinerary.start_date.isoformat()
+
             # Generate new plans with updated context
-            new_plans = await self.llm.astructured_predict(
-                List[DayPlan],
+            new_itinerary = await self.llm.astructured_predict(
+                TravelItinerary,
                 self.planning_prompt,
-                **updated_context.model_dump()
+                **prompt_vars
             )
 
             # Update existing itinerary
-            existing_itinerary.update_daily_plans(new_plans)
+            existing_itinerary.update_itinerary(new_itinerary)
             
-            return StopEvent(content=existing_itinerary)
+            return StopEvent(result=existing_itinerary.model_dump())
             
         except Exception as e:
             self._log_verbose(f"Error updating daily plans: {str(e)}")
