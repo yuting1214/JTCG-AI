@@ -1,32 +1,35 @@
 # app/artifacts/itinerary.py
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Optional
+from app.workflow.models import (
+    DayPlan,
+    TravelItinerary,
+    HotelRecommendation,
+    HotelPreferences
+)
 
-class DayPlan(BaseModel):
-    day: int
-    activities: List[Dict[str, str]] = []
-    meals: List[Dict[str, str]] = []
-    transit: List[Dict[str, str]] = []
-
-class HotelRecommendation(BaseModel):
-    name: str
-    location: str
-    price_range: str
-    amenities: List[str] = []
-    description: str = ""
-    
 class ItineraryArtifact(BaseModel):
-    destination: str
-    duration: int
-    daily_plans: List[DayPlan] = []
+    itinerary: Optional[TravelItinerary] = None
     hotel_recommendations: List[HotelRecommendation] = []
+
+    # Additional information
     summary: str = ""
     additional_notes: str = ""
     
-    def update_daily_plans(self, new_plans: List[DayPlan]):
-        """Update daily plans"""
-        self.daily_plans = new_plans
+    def update_itinerary(self, new_itinerary: TravelItinerary):
+        """Update the entire travel itinerary"""
+        self.itinerary = new_itinerary
         
+    def update_daily_plans(self, new_plans: List[DayPlan]):
+        """Update just the daily plans within the itinerary"""
+        if self.itinerary:
+            self.itinerary.daily_plans = new_plans
+            
+    def update_hotel_preferences(self, preferences: HotelPreferences):
+        """Update hotel preferences"""
+        if self.itinerary:
+            self.itinerary.hotel_preferences = preferences
+            
     def update_hotels(self, hotels: List[HotelRecommendation]):
         """Update hotel recommendations"""
         self.hotel_recommendations = hotels
@@ -34,3 +37,10 @@ class ItineraryArtifact(BaseModel):
     def update_summary(self, summary: str):
         """Update itinerary summary"""
         self.summary = summary
+        
+    def add_note(self, note: str):
+        """Add additional note"""
+        if self.additional_notes:
+            self.additional_notes += f"\n{note}"
+        else:
+            self.additional_notes = note
