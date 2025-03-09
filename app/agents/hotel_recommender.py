@@ -203,6 +203,7 @@ class HotelRecommenderAgent(BaseAgent):
     async def process(self, content: ItineraryArtifact) -> HotelRecommendationEvent:
         """Generate hotel recommendations based on itinerary content."""
         # Extract locations and map to county IDs
+        print(content.itinerary)
         county_ids = set()
         for plan in content.itinerary.daily_plans:
             for activity in plan.activities:
