@@ -5,15 +5,19 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
+from app.agents.base import BaseAgent
 from app.config.constants import BASE_URL
 from app.artifacts.itinerary import ItineraryArtifact
 from app.workflow.models import VacancySearchParams, HotelSearchParams, HotelPlanParams, HotelRecommendation
 from app.workflow.events import HotelRecommendationEvent
+from app.utils.counties_mapper import CountyMapper
+from app.workflow.models import Location, HotelRoom
 
 _ = load_dotenv('.env')
 
-class HotelRecommenderAgent():
-    def __init__(self, verbose: bool = False):
+class HotelRecommenderAgent(BaseAgent):
+    def __init__(self, llm: OpenAI, verbose: bool = False):
+        super().__init__(llm, verbose)
         self.api_base_url = f"{BASE_URL}/api/v3/tools/interview_test/taiwan_hotels"
         self.api_key = os.getenv("JTCG_API_KEY")
         if not self.api_key:
@@ -24,6 +28,7 @@ class HotelRecommenderAgent():
         }
         self.tools = self._create_tools()
         self.tools_by_name = {tool.metadata.name: tool for tool in self.tools}
+        self.county_mapper = CountyMapper()
 
     async def _make_api_request(self, endpoint: str, params: dict = None) -> dict:
         """
@@ -165,50 +170,89 @@ class HotelRecommenderAgent():
             self._log_verbose(f"Error executing tool '{tool_name}': {str(e)}")
             raise
 
+    def _parse_hotel_details(self, hotel_data: dict, available_rooms: List[dict]) -> HotelRecommendation:
+        """Parse raw hotel data into simplified HotelRecommendation model."""
+        try:
+            location = Location(
+                county=hotel_data.get('county', {}).get('name', ''),
+                district=hotel_data.get('district', {}).get('name', ''),
+                latitude=hotel_data.get('latitude'),
+                longitude=hotel_data.get('longitude')
+            )
+
+            # Parse room information from available rooms data
+            rooms = []
+            for room in available_rooms:
+                rooms.append(HotelRoom(
+                    room_name=room.get('name', ''),
+                    bed_types=room.get('bed_types', []),
+                    facilities=room.get('facilities', []),
+                    price=float(room.get('price', 0))
+                ))
+
+            return HotelRecommendation(
+                hotel_id=str(hotel_data['id']),
+                name=hotel_data['name'],
+                location=location,
+                rooms=rooms
+            )
+        except Exception as e:
+            self._log_verbose(f"Error parsing hotel details: {str(e)}")
+            raise
+
     async def process(self, content: ItineraryArtifact) -> HotelRecommendationEvent:
         """Generate hotel recommendations based on itinerary content."""
-
-        # Extract locations from daily plans
-        locations = set()
-        for plan in content.daily_plans:
+        # Extract locations and map to county IDs
+        county_ids = set()
+        for plan in content.itinerary.daily_plans:
             for activity in plan.activities:
                 if 'location' in activity:
-                    locations.add(activity['location'])
+                    county_id = self.county_mapper.get_county_id(activity['location'])
+                    if county_id:
+                        county_ids.add(county_id)
+                        self._log_verbose(f"Mapped location '{activity['location']}' to county ID {county_id}")
 
-        # Search for hotels near activity locations
+        if not county_ids:
+            self._log_verbose("No valid counties found in itinerary")
+            return HotelRecommendationEvent(content=content)
+
+        # Calculate stay duration and requirements
+        check_in_date = content.context.start_date
+        check_out_date = check_in_date + timedelta(days=content.context.duration)
+
         hotel_recommendations = []
-        for location in locations:
+        for county_id in county_ids:
             try:
-
-                # Check vacancies for each hotel
-                hotels = await self.execute_tool(
+                # First, check vacancies
+                vacancies = await self.execute_tool(
                     "check_vacancies",
-                    check_in_date=content.context.start_date,
-                    check_out_date=content.context.start_date + timedelta(days=content.context.duration),
-                    num_rooms=(content.context.group_size + 1) // 2,
-                    num_guests=content.context.group_size
+                    params={
+                        "county_id": county_id,
+                        "check_in_date": check_in_date.strftime("%Y-%m-%d"),
+                        "check_out_date": check_out_date.strftime("%Y-%m-%d"),
+                    }
                 )
 
-                # Get plans for available hotels
-                for hotel in hotels[:3]:  # Limit to top 3 hotels
-                    if hotel["id"] in [v["hotel_id"] for v in vacancies]:
-                        plans = await self.execute_tool(
-                            "get_plans",
-                            hotel_id=hotel["id"]
-                        )
+                if not vacancies:
+                    continue
 
-                        recommendation = HotelRecommendation(
-                            name=hotel["name"],
-                            location=hotel["address"],
-                            price_range=f"{min(p['price'] for p in plans)} - {max(p['price'] for p in plans)}",
-                            amenities=hotel.get("facilities", []),
-                            description=hotel.get("description", ""),
-                            available_plans=plans
+                # Get details for hotels with vacancies
+                for vacancy in vacancies[:3]:  # Limit to top 3 hotels
+                    try:
+
+                        # Parse into simplified recommendation format
+                        recommendation = self._parse_hotel_details(
+                            vacancy, 
+                            vacancy['available_rooms']
                         )
                         hotel_recommendations.append(recommendation)
 
+                    except Exception as e:
+                        self._log_verbose(f"Error processing hotel {vacancy.get('hotel_id')}: {str(e)}")
+                        continue
+
             except Exception as e:
-                self._log_verbose(f"Error processing location {location}: {str(e)}")
+                self._log_verbose(f"Error processing county {county_id}: {str(e)}")
                 continue
 
         content.hotel_recommendations = hotel_recommendations

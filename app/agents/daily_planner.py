@@ -1,8 +1,8 @@
 from typing import List, Dict, Any
 from datetime import date
 from app.agents.base import BaseAgent
-from app.workflow.events import StopEvent
 from app.workflow.models import TravelItinerary
+from app.workflow.events import StopEvent, PlanGenerationEvent
 from app.artifacts.context import ContextArtifact
 from app.artifacts.itinerary import ItineraryArtifact
 from llama_index.llms.openai import OpenAI
@@ -78,7 +78,7 @@ class DailyPlannerAgent(BaseAgent):
         }
 
 
-    async def process(self, context: ContextArtifact) -> StopEvent:
+    async def process(self, context: ContextArtifact) -> PlanGenerationEvent:
         """Generate daily plans based on travel context."""
         try:
     
@@ -99,7 +99,7 @@ class DailyPlannerAgent(BaseAgent):
                 itinerary=daily_plans
             )
             
-            return StopEvent(result=itinerary.model_dump())
+            return PlanGenerationEvent(content=itinerary)
             
         except Exception as e:
             self._log_verbose(f"Error generating daily plans: {str(e)}")
@@ -114,14 +114,14 @@ class DailyPlannerAgent(BaseAgent):
         self,
         existing_itinerary: ItineraryArtifact,
         updated_context: ContextArtifact
-    ) -> StopEvent:
+    ) -> PlanGenerationEvent:
         """Update existing plans with new context."""
         try:
             # Prepare prompt variables with defaults
             prompt_vars = self._prepare_prompt_variables(updated_context)
             
-            # if existing_itinerary.itinerary:
-            #     prompt_vars["start_date"] = existing_itinerary.itinerary.start_date.isoformat()
+            if existing_itinerary.itinerary:
+                prompt_vars["start_date"] = existing_itinerary.itinerary.start_date.isoformat()
 
             # Generate new plans with updated context
             new_itinerary = await self.llm.astructured_predict(
@@ -133,7 +133,7 @@ class DailyPlannerAgent(BaseAgent):
             # Update existing itinerary
             existing_itinerary.update_itinerary(new_itinerary)
             
-            return StopEvent(result=existing_itinerary.model_dump())
+            return PlanGenerationEvent(content=existing_itinerary)
             
         except Exception as e:
             self._log_verbose(f"Error updating daily plans: {str(e)}")

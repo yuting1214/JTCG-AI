@@ -74,13 +74,8 @@ class VacancySearchParams(BaseModel):
     check_out_date: datetime = Field(
         description="Check-out date for the hotel stay"
     )
-    num_rooms: int = Field(
-        description="Number of rooms required",
-        ge=1
-    )
-    num_guests: int = Field(
-        description="Total number of guests",
-        ge=1
+    county_ids: List[int] = Field(
+        description="List of county IDs to search for hotels"
     )
 
 class HotelSearchParams(BaseModel):
@@ -94,19 +89,16 @@ class HotelPlanParams(BaseModel):
     )
 
 class HotelRoom(BaseModel):
-    room_type: str
+    room_name: str
     bed_types: List[str]
     facilities: List[str]
     price: float
-    available: bool
 
 class HotelRecommendation(BaseModel):
     hotel_id: str
     name: str
     location: Location
-    rating: Optional[float]
     rooms: List[HotelRoom]
-    nearby_attractions: List[str]
 
 class TravelItinerary(BaseModel):
     daily_plans: List[DayPlan]

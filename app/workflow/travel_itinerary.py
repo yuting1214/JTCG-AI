@@ -8,14 +8,14 @@ from app.agents import (
     IntentionDetectionAgent,
     ContextExtractionAgent,
     DailyPlannerAgent,
-    # HotelRecommenderAgent,
+    HotelRecommenderAgent,
     # ItineraryIntegratorAgent,
     # ItineraryEvaluatorAgent
 )
 from app.workflow.events import (
     IntentionEvent,
     ContextExtractionEvent,
-    # PlanGenerationEvent,
+    PlanGenerationEvent,
     # HotelRecommendationEvent,
     # IntegrationEvent
 )
@@ -50,7 +50,7 @@ class TravelItineraryWorkflow(Workflow):
         self.intention_agent = IntentionDetectionAgent(llm=OpenAI(model="gpt-4o-mini", temperature=0.7), verbose=verbose)
         self.context_agent = ContextExtractionAgent(llm=OpenAI(model="gpt-4o-mini", temperature=0.7), verbose=verbose)
         self.planner_agent = DailyPlannerAgent(llm=OpenAI(model="gpt-4o-mini", temperature=0.7), verbose=verbose)
-        # self.hotel_agent = HotelRecommenderAgent(llm=OpenAI(model="gpt-4o-mini", temperature=0.7), verbose=verbose)
+        self.hotel_agent = HotelRecommenderAgent(llm=OpenAI(model="gpt-4o-mini", temperature=0.7), verbose=verbose)
         # self.integrator_agent = ItineraryIntegratorAgent(llm=OpenAI(model="gpt-4o-mini", temperature=0.7), verbose=verbose)
 
         # Set existing artifacts if provided
@@ -102,7 +102,7 @@ class TravelItineraryWorkflow(Workflow):
             )
     
     @step
-    async def generate_daily_plans(self, ctx: Context, ev: ContextExtractionEvent) -> StopEvent:
+    async def generate_daily_plans(self, ctx: Context, ev: ContextExtractionEvent) -> PlanGenerationEvent:
         """Generate daily itinerary plans or update existing plans."""
         if self.existing_itinerary:
             # Update existing itinerary with new context
@@ -114,18 +114,18 @@ class TravelItineraryWorkflow(Workflow):
             # Generate new plans from scratch
             return await self.planner_agent.process(ev.context)
 
-    # @step
-    # async def recommend_hotels(self, ctx: Context, ev: PlanGenerationEvent) -> HotelRecommendationEvent:
-    #     """Generate hotel recommendations based on itinerary."""
-    #     if self.existing_itinerary and self.existing_itinerary.hotel_recommendations:
-    #         # Update existing hotel recommendations
-    #         updated_itinerary = await self.hotel_agent.update_recommendations(
-    #             ev.content
-    #         )
-    #         return HotelRecommendationEvent(content=updated_itinerary)
-    #     else:
-    #         # Generate new hotel recommendations
-    #         return await self.hotel_agent.process(ev.content)
+    @step
+    async def recommend_hotels(self, ctx: Context, ev: PlanGenerationEvent) -> StopEvent:
+        """Generate hotel recommendations based on itinerary."""
+        if self.existing_itinerary and self.existing_itinerary.hotel_recommendations:
+            # Update existing hotel recommendations
+            updated_itinerary = await self.hotel_agent.update_recommendations(
+                ev.content
+            )
+            return StopEvent(result=updated_itinerary.dict())
+        else:
+            # Generate new hotel recommendations
+            return await self.hotel_agent.process(ev.content)
 
     # @step
     # async def integrate_itinerary(self, ctx: Context, ev: HotelRecommendationEvent) -> StopEvent:
