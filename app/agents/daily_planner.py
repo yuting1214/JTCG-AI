@@ -1,7 +1,8 @@
 from typing import List, Dict, Any
+from datetime import date
 from app.agents.base import BaseAgent
-from app.workflow.events import StopEvent
 from app.workflow.models import TravelItinerary
+from app.workflow.events import StopEvent, PlanGenerationEvent
 from app.artifacts.context import ContextArtifact
 from app.artifacts.itinerary import ItineraryArtifact
 from llama_index.llms.openai import OpenAI
@@ -20,7 +21,7 @@ class DailyPlannerAgent(BaseAgent):
                 Preferences: {preferences}
 
             For each day, provide:
-                1. Day number
+                1. Day number and date
                 2. Main location (county and district)
                 3. Schedule as a chronological list of events, where each event has:
                 - time (in 24-hour format, e.g. "09:00")
@@ -31,6 +32,7 @@ class DailyPlannerAgent(BaseAgent):
                 Example day format:
                 {
                     "day": 1,
+                    "date": "2024-03-20",
                     "location": {"county": "台北市", "district": "信義區"},
                     "schedule": [
                         {
@@ -64,18 +66,19 @@ class DailyPlannerAgent(BaseAgent):
 
     def _prepare_prompt_variables(self, context: ContextArtifact) -> Dict[str, Any]:
         """Prepare and validate all variables needed for the prompt"""
+        start_date = date.today() # Default to start Today
         
         return {
             "destination": getattr(context, "destination", "Unknown"),
             "duration": getattr(context, "duration", 1),
-            # "start_date": start_date.isoformat(),
+            "start_date": start_date.isoformat(),
             "group_size": getattr(context, "group_size", 1),
             "budget": getattr(context, "budget", "flexible"),
             "preferences": getattr(context, "preferences", "standard travel preferences")
         }
 
 
-    async def process(self, context: ContextArtifact) -> StopEvent:
+    async def process(self, context: ContextArtifact) -> PlanGenerationEvent:
         """Generate daily plans based on travel context."""
         try:
     
@@ -96,7 +99,7 @@ class DailyPlannerAgent(BaseAgent):
                 itinerary=daily_plans
             )
             
-            return StopEvent(result=itinerary.model_dump())
+            return PlanGenerationEvent(content=itinerary)
             
         except Exception as e:
             self._log_verbose(f"Error generating daily plans: {str(e)}")
@@ -111,14 +114,14 @@ class DailyPlannerAgent(BaseAgent):
         self,
         existing_itinerary: ItineraryArtifact,
         updated_context: ContextArtifact
-    ) -> StopEvent:
+    ) -> PlanGenerationEvent:
         """Update existing plans with new context."""
         try:
             # Prepare prompt variables with defaults
             prompt_vars = self._prepare_prompt_variables(updated_context)
             
-            # if existing_itinerary.itinerary:
-            #     prompt_vars["start_date"] = existing_itinerary.itinerary.start_date.isoformat()
+            if existing_itinerary.itinerary:
+                prompt_vars["start_date"] = existing_itinerary.itinerary.start_date.isoformat()
 
             # Generate new plans with updated context
             new_itinerary = await self.llm.astructured_predict(
@@ -130,7 +133,7 @@ class DailyPlannerAgent(BaseAgent):
             # Update existing itinerary
             existing_itinerary.update_itinerary(new_itinerary)
             
-            return StopEvent(result=existing_itinerary.model_dump())
+            return PlanGenerationEvent(content=existing_itinerary)
             
         except Exception as e:
             self._log_verbose(f"Error updating daily plans: {str(e)}")
