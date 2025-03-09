@@ -1,4 +1,5 @@
 from typing import List, Dict, Any
+from datetime import date
 from app.agents.base import BaseAgent
 from app.workflow.events import StopEvent
 from app.workflow.models import TravelItinerary
@@ -20,7 +21,7 @@ class DailyPlannerAgent(BaseAgent):
                 Preferences: {preferences}
 
             For each day, provide:
-                1. Day number
+                1. Day number and date
                 2. Main location (county and district)
                 3. Schedule as a chronological list of events, where each event has:
                 - time (in 24-hour format, e.g. "09:00")
@@ -31,6 +32,7 @@ class DailyPlannerAgent(BaseAgent):
                 Example day format:
                 {
                     "day": 1,
+                    "date": "2024-03-20",
                     "location": {"county": "台北市", "district": "信義區"},
                     "schedule": [
                         {
@@ -64,11 +66,12 @@ class DailyPlannerAgent(BaseAgent):
 
     def _prepare_prompt_variables(self, context: ContextArtifact) -> Dict[str, Any]:
         """Prepare and validate all variables needed for the prompt"""
+        start_date = date.today() # Default to start Today
         
         return {
             "destination": getattr(context, "destination", "Unknown"),
             "duration": getattr(context, "duration", 1),
-            # "start_date": start_date.isoformat(),
+            "start_date": start_date.isoformat(),
             "group_size": getattr(context, "group_size", 1),
             "budget": getattr(context, "budget", "flexible"),
             "preferences": getattr(context, "preferences", "standard travel preferences")

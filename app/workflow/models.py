@@ -1,7 +1,7 @@
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
-from datetime import date
+from datetime import date, datetime
 
 class IntentType(Enum):
     NEW_TRIP = "new_trip"
@@ -65,6 +65,33 @@ class DayPlan(BaseModel):
 #     max_price: Optional[float] = None
 #     guest_count: int
 #     room_count: int
+
+# Pydantic models for API requests
+class VacancySearchParams(BaseModel):
+    check_in_date: datetime = Field(
+        description="Check-in date for the hotel stay"
+    )
+    check_out_date: datetime = Field(
+        description="Check-out date for the hotel stay"
+    )
+    num_rooms: int = Field(
+        description="Number of rooms required",
+        ge=1
+    )
+    num_guests: int = Field(
+        description="Total number of guests",
+        ge=1
+    )
+
+class HotelSearchParams(BaseModel):
+    keyword: str = Field(
+        description="Hotel name or keyword to search for"
+    )
+
+class HotelPlanParams(BaseModel):
+    hotel_id: str = Field(
+        description="Unique identifier of the hotel"
+    )
 
 class HotelRoom(BaseModel):
     room_type: str
